@@ -1,0 +1,189 @@
+import os
+
+    
+class Patient: 
+    def __init__(self,patient_id,name,age,diabetes_type):
+        self.id=patient_id
+        self.name=name
+        self.age=age
+        self.diabetes_type=diabetes_type
+        self.BG={}
+        self.avgBG=0
+        self.countBG=0
+        self.slope_RangeOverDate=0
+        self.sdvBG=0
+    def sortBG(self):
+        # sort the BG readings by date asecendingly for each patient
+        # and consequently, the self.BG is converted from dic to list
+        self.BG=sorted(self.BG.iteritems(),key=lambda d:d[0],reverse=False)
+        return
+    def getSdvBG(self):
+        #compute the standard deviation of each patient's BG
+        total=0
+        avg=float(self.avgBG)
+        for i in range(self.countBG):
+            total+=(float(self.BG[i][1])-avg)**2
+        self.sdvBG=(total/self.countBG)**0.5
+        return self.sdvBG
+        
+
+def createPatientList():
+    # read the .csv file, and create the list of patients(object) for type_1 and type_2 
+    allPatients={}
+    patientList_1=[]
+    patientList_2=[]
+    lines=readFileToList('patients.csv')
+    lineCounts=len(lines)
+    for i in range(1,lineCounts):
+        columns=lines[i].split(',')
+        patient=Patient(columns[4],columns[3],columns[0],columns[1])
+        allPatients[patient.id]=patient
+    dataLines=readFileToList('bg_readings.csv')
+    lineCounts=len(dataLines)
+    for i in range(1,lineCounts):
+        columns=dataLines[i].split(',')
+        allPatients[columns[3]].BG[columns[0]]=columns[1]
+        avgBG=allPatients[columns[3]].avgBG
+        countBG=allPatients[columns[3]].countBG
+        totalBG=avgBG*countBG+float(columns[1])
+        allPatients[columns[3]].countBG=allPatients[columns[3]].countBG+1
+        allPatients[columns[3]].avgBG=totalBG/allPatients[columns[3]].countBG
+    for key in allPatients:
+        allPatients[key].sortBG()
+        if allPatients[key].diabetes_type=='type_1':
+            patientList_1.append(allPatients[key])
+        else:
+            patientList_2.append(allPatients[key])
+    return patientList_1,patientList_2
+
+def  answerQuestion_1(patientsType_1,patientsType_2):
+    countType_1=len(patientsType_1)
+    countType_2=len(patientsType_2)
+    totalSdvType_1=totalSdvType_2=0
+    
+    for patient in patientsType_1:
+        totalSdvType_1+=patient.getSdvBG()
+    if countType_1<30:
+        avgSdvType_1=totalSdvType_1/(countType_1-1)
+    else:
+        avgSdvType_1=totalSdvType_1/countType_1
+        
+    for patient in patientsType_2:
+        totalSdvType_2+=patient.getSdvBG()
+    if countType_2<30:
+        avgSdvType_2=totalSdvType_2/(countType_2-1)
+    else:
+        avgSdvType_2=totalSdvType_2/countType_2
+        
+    if avgSdvType_1<avgSdvType_2:
+        print 'Answer to Q_1: \n Type 1 is better'
+    else:
+        print 'Answer to Q_1: \n Type 2 is better'
+
+def answerQuestion_2(patients):
+    print '\nAnswer to Q_2:'
+    sumSlopeUp=sumSlopeDown=0
+    countSlopeUp=countSlopeDown=0
+    for patient in patients:
+        slope=getSlope_RangeOverDate(patient)
+        patient.slope_RangeOverDate=slope
+        if slope>0:
+            sumSlopeUp+=slope
+            countSlopeUp+=1
+        else:
+            sumSlopeDown+=slope
+            countSlopeDown+=1
+    avgSlopeUp=sumSlopeUp/countSlopeUp
+    avgSlopeDown=sumSlopeDown/countSlopeDown
+    for patient in patients:
+        if patient.slope_RangeOverDate>avgSlopeUp:
+            print patient.id,patient.name,'is clearly deteriorating;'
+        if patient.slope_RangeOverDate<avgSlopeDown:
+            print patient.id,patient.name,'is clearly improving;'
+
+def answerQuestion_3(patientsType_1,patientsType_2):
+    print '\nAnswer to Q_3:'
+    r_1=getPearson(patientsType_1)
+    if r_1>=0.3:
+        print 'To patients of type_1, age may decrease the ability to control BG'
+    elif r_1<=-0.3:
+        print 'To patients of type_1, age may improve the ability to control BG'
+    else:
+        print 'To patients of type_1, age has no significant influence on the ability to control BG'
+    r_2=getPearson(patientsType_2)
+    if r_1>=0.3:
+        print 'To patients of type_2, age may decrease the ability to control BG'
+    elif r_1<=-0.3:
+        print 'To patients of type_2, age may improve the ability to control BG'
+    else:
+        print 'To patients of type_2, age has no significant influence on the ability to control BG'
+    
+
+def getSlope_RangeOverDate(patient):
+    # for question #2
+    # calculate the slope of trend line for BG range over Date, for each patient
+    rangeList=getSampleRanges(patient)
+    n=len(rangeList)+1
+    sumX=sumY=sumXY=sumX2=0
+    for i in range(n-1):
+        sumX+=i
+        sumY+=rangeList[i]
+        sumXY+=(i*rangeList[i])
+        sumX2+=i**2
+    slope=(n*sumXY-sumX*sumY)/(n*sumX2-sumX**2)
+    return slope
+    
+def getSampleRanges(patient):
+    # for question #2
+    # for each patient, every ten of BG readings were divided into one group,
+    # and the range(Max-Min) was computed in each group.
+    n=10
+    theRanges=[]
+    numSamples=len(patient.BG)//n
+    for i in range(numSamples):
+        theMax=0
+        theMin=9999
+        for j in range(n):
+            if float(patient.BG[i*n+j][1])>theMax:
+                theMax=float(patient.BG[i*n+j][1])
+            if float(patient.BG[i*n+j][1])<theMin:
+                theMin=float(patient.BG[i*n+j][1])
+        theRanges.append(theMax-theMin)
+    return theRanges
+
+def getPearson(patients):
+    # for question #3
+    # calculate the correlation coefficient between patient's standard deviation of BG reading
+    # and his age.
+    n=len(patients)
+    sumXY=sumX=sumY=0
+    sumX2=sumY2=0
+    for p in patients:
+        sumX+=float(p.age)
+        sumY+=p.sdvBG
+        sumXY+=float(p.age)*p.sdvBG
+        sumX2+=float(p.age)**2
+        sumY2+=p.sdvBG**2
+    correlationCoefficient=(n*sumXY-sumX*sumY)/(((n*sumX2-sumX**2)*(n*sumY2-sumY*2))**0.5)
+    return correlationCoefficient
+    
+         
+def readFileToList(filePath):
+    # for utility
+    linelist=[]
+    f=file(filePath)
+    lines=f.readlines()
+    for line in lines:
+        line=line.strip()
+        if line:
+            linelist.append(line)
+    return linelist
+
+def Main():
+    patientList_1,patientList_2=createPatientList()
+    answerQuestion_1(patientList_1,patientList_2)
+    answerQuestion_2(patientList_1+patientList_2)
+    answerQuestion_3(patientList_1,patientList_2)
+
+if __name__=='__main__':
+    Main()
